@@ -50,32 +50,34 @@ jobs:
           pip install -e ".[dev]"
           python -c "from headroom._core import DiffCompressor; print('headroom._core OK:', DiffCompressor)"
 
-      # Memory/relevance tests embed text via fastembed (which pulls
-      # qdrant/bge-small-en-v1.5-onnx-q from HuggingFace on first use). CI used
-      # to hit HF live inside every test, so transient HF outages failed dozens
-      # of memory tests with "couldn't connect to huggingface.co". Pin
-      # fastembed's cache to a stable dir, cache it across runs, and pre-fetch it
-      # once (with retries) so the tests run offline against the cache. The key
-      # is static (per model), so main warms the cache for every branch/run.
-      - name: Configure fastembed cache dir
-        run: echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
-
-      - name: Cache embedding model (fastembed)
+      # The memory tests embed text via sentence-transformers
+      # (all-MiniLM-L6-v2), downloaded from HuggingFace on first use. CI hit HF
+      # live inside every test, so HF rate-limits (HTTP 429) failed dozens of
+      # memory tests with "couldn't connect to huggingface.co". Cache the HF Hub
+      # dir and pre-fetch the model once (with backoff) so tests reuse the cache;
+      # the static key means main warms it for every branch/run. fastembed is
+      # NOT installed in this job (it lives in the [relevance] extra) — the
+      # relevance model is handled in the test-extras job instead. An HF_TOKEN
+      # secret, when present, lifts the unauthenticated rate limit.
+      - name: Cache HuggingFace models (sentence-transformers)
         uses: actions/cache@v4
         with:
-          path: ~/.cache/fastembed
-          key: ${{ runner.os }}-fastembed-bge-small-en-v1.5-onnx-q-v1
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-hf-all-MiniLM-L6-v2-v1
 
-      - name: Pre-fetch embedding model (resilient to HF flakiness)
+      - name: Pre-fetch embedding model (resilient to HF rate limits)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
-          for i in 1 2 3 4 5; do
-            if python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5'); print('embedding model ready')"; then
+          for i in 1 2 3 4 5 6; do
+            if python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2'); print('embedding model ready')"; then
               exit 0
             fi
-            echo "::warning::fastembed model fetch attempt $i failed; retrying in 20s"
-            sleep 20
+            echo "::warning::all-MiniLM-L6-v2 fetch attempt $i failed; backing off"
+            sleep $((i * 30))
           done
-          echo "::error::could not fetch the embedding model from HuggingFace after 5 attempts"
+          echo "::error::could not fetch all-MiniLM-L6-v2 from HuggingFace (rate limited?)"
           exit 1
 
       - name: Run linting
@@ -128,6 +130,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,relevance]"
           python -c "from headroom._core import SmartCrusher; print('headroom._core OK:', SmartCrusher)"
+
+      # test_relevance.py embeds via fastembed (BAAI/bge-small-en-v1.5 →
+      # qdrant/bge-small-en-v1.5-onnx-q on HF). Same HF-429 problem as the test
+      # job: cache fastembed's model dir and pre-fetch once with backoff. (This
+      # is the job where fastembed is installed; the test job uses
+      # sentence-transformers instead.)
+      - name: Configure fastembed cache dir
+        run: echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
+
+      - name: Cache embedding model (fastembed)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: ${{ runner.os }}-fastembed-bge-small-en-v1.5-onnx-q-v1
+
+      - name: Pre-fetch fastembed model (resilient to HF rate limits)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5'); print('fastembed model ready')"; then
+              exit 0
+            fi
+            echo "::warning::fastembed model fetch attempt $i failed; backing off"
+            sleep $((i * 30))
+          done
+          echo "::error::could not fetch the fastembed model from HuggingFace (rate limited?)"
+          exit 1
 
       - name: Run relevance tests
         run: |
