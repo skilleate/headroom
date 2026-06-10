@@ -188,12 +188,21 @@ class TestActivityDecision:
         assert res.holding_msg_indices == []
         assert res.newly_matured == 0
 
-    def test_block_with_client_breakpoint_untouched(self):
-        msgs = [*base_conv(), *quiet(10)]
+    def test_client_breakpoint_on_fresh_read_is_held_and_relocated(self):
+        """Claude Code parks its tail breakpoint on the newest block —
+        right after a Read, that's the Read result itself. The read must
+        still be held (verbatim) and relocation must move the breakpoint
+        off it, otherwise the verbatim form gets cache-written."""
+        msgs = base_conv()
         msgs[2]["content"][0]["cache_control"] = {"type": "ephemeral"}
         res = manager().apply(msgs)
-        assert res.holding_msg_indices == []
+        assert res.holding_msg_indices == [2]
         assert res.messages[2]["content"][0]["content"] == CONTENT
+
+        out = relocate_cache_breakpoint(res.messages, res.holding_msg_indices)
+        # Breakpoint stripped from the held read, re-anchored before it.
+        assert "cache_control" not in out[2]["content"][0]
+        assert out[1]["content"][-1].get("cache_control") == {"type": "ephemeral"}
 
     def test_openai_format(self):
         msgs = [{"role": "user", "content": "look"}, *openai_read("r1", "/x/foo.py", CONTENT)]

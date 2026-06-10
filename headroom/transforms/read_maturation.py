@@ -225,6 +225,12 @@ class ReadMaturationManager:
             return msg, False
 
         # Anthropic format: tool_result blocks inside a user message.
+        # NOTE: blocks carrying a client cache_control are NOT skipped —
+        # Claude Code parks its tail breakpoint on the newest content
+        # block, which right after a Read is the Read's tool_result
+        # itself. Under this mechanism the proxy owns breakpoint
+        # placement: relocate_cache_breakpoint() strips/moves breakpoints
+        # in the held region after this pass.
         if isinstance(content, list):
             new_blocks: list[Any] = []
             changed = False
@@ -235,7 +241,6 @@ class ReadMaturationManager:
                     and b.get("type") == "tool_result"
                     and b.get("tool_use_id", "") in activity.read_calls
                     and isinstance(b.get("content"), str)
-                    and "cache_control" not in b
                 ):
                     tc_id = b["tool_use_id"]
                     new_content, holding = self._handle_read(tc_id, b["content"], activity, result)
