@@ -99,13 +99,18 @@ class LearnPlugin(ABC):
         ...
 
     @abstractmethod
-    def scan_project(self, project: ProjectInfo, max_workers: int = 1) -> list[SessionData]:
+    def scan_project(
+        self, project: ProjectInfo, max_workers: int = 1, include_subagents: bool = True
+    ) -> list[SessionData]:
         """Scan all sessions for a project, returning normalized data.
 
         Args:
             project: The project to scan.
             max_workers: Number of threads for parallel file scanning.
                          1 (default) = serial.  >1 = concurrent.
+            include_subagents: Also scan nested subagent/workflow transcripts
+                         where the agent system writes them (Claude Code).
+                         Ignored by agents without a nested transcript layout.
         """
         ...
 
