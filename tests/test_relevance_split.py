@@ -185,14 +185,17 @@ def test_router_split_can_be_disabled():
     assert "relevance_split" not in chain
 
 
-def test_relevance_split_on_by_default_and_non_blocking():
+def test_relevance_split_on_by_default_and_non_blocking(monkeypatch):
     from headroom.relevance.bm25 import BM25Scorer
 
     r = ContentRouter(ContentRouterConfig())
     assert r.config.relevance_split is True
-    # Even with the default hybrid tier, the hot-path scorer is served
-    # synchronously as BM25 — the embedding model warms in the background, so a
-    # request never blocks on the ~30MB download.
+    # Stub the background warm-up so this is deterministic: with a warm HF cache
+    # the prewarm thread could otherwise swap in the hybrid scorer before we
+    # read it. We assert the *synchronous* hot path serves BM25 without loading
+    # the embedding model on the request thread (the swap happens later, in the
+    # background thread — proven separately).
+    monkeypatch.setattr(r, "_start_relevance_prewarm", lambda tier: None)
     assert isinstance(r._get_relevance_scorer(), BM25Scorer)
 
 
