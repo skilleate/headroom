@@ -65,7 +65,6 @@ def _strip_index_from_content_blocks(content: Any) -> None:
             _strip_index_from_content_blocks(block.get("content"))
 
 
-
 class AnthropicHandlerMixin:
     """Mixin providing Anthropic API handler methods for HeadroomProxy."""
 

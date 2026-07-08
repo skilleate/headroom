@@ -218,8 +218,18 @@ def test_noop_when_client_already_uses_tool_search() -> None:
 def test_noop_when_nothing_to_defer() -> None:
     # every tool is core -> nothing deferred -> cache prefix untouched
     core = [
-        "bash", "read", "write", "edit", "multiedit", "glob", "grep", "task",
-        "todowrite", "todoread", "webfetch", "skill",
+        "bash",
+        "read",
+        "write",
+        "edit",
+        "multiedit",
+        "glob",
+        "grep",
+        "task",
+        "todowrite",
+        "todoread",
+        "webfetch",
+        "skill",
     ]
     tools = [{"name": n, "input_schema": {}} for n in core]
     assert inject_tool_search_deferral(tools) is tools
@@ -231,12 +241,11 @@ def test_cache_control_moved_off_deferred_tool_to_last_resident() -> None:
     tools[10]["cache_control"] = {"type": "ephemeral"}
     out = inject_tool_search_deferral(tools)
     # no deferred tool may carry cache_control (Anthropic 400s)
-    assert all(
-        "cache_control" not in t for t in out if t.get("defer_loading")
-    )
+    assert all("cache_control" not in t for t in out if t.get("defer_loading"))
     # exactly one resident real tool now carries the moved breakpoint
     resident_cc = [
-        t for t in out
+        t
+        for t in out
         if not t.get("type") and not t.get("defer_loading") and t.get("cache_control")
     ]
     assert len(resident_cc) == 1
