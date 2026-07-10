@@ -54,6 +54,16 @@ def _extract_tool_result_content(msg: dict) -> str | None:
                 inner = block.get("content")
                 if isinstance(inner, str):
                     return inner
+                # Claude Code sends content as a list of text blocks:
+                # [{"type": "text", "text": "..."}]
+                if isinstance(inner, list):
+                    parts = [
+                        b.get("text", "")
+                        for b in inner
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    ]
+                    if parts:
+                        return "\n".join(parts)
     return None
 
 
@@ -69,7 +79,12 @@ def _swap_tool_result_content(msg: dict, new_content: str) -> dict:
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_result":
-                block["content"] = new_content
+                inner = block.get("content")
+                if isinstance(inner, list):
+                    # Preserve list shape: replace with a single text block
+                    block["content"] = [{"type": "text", "text": new_content}]
+                else:
+                    block["content"] = new_content
                 break
     return new_msg
 
