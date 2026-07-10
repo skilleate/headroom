@@ -446,6 +446,11 @@ class ReadLifecycleManager:
             tc_id = block.get("tool_use_id", "")
             classification = replacements.get(tc_id)
             tool_content = block.get("content", "")
+            # Claude Code sends content as a list of text blocks: [{"type": "text", "text": "..."}]
+            if isinstance(tool_content, list):
+                parts = [b.get("text", "") for b in tool_content if isinstance(b, dict) and b.get("type") == "text"]
+                tool_content = "
+".join(parts) if parts else ""
 
             if classification and isinstance(tool_content, str):
                 replaced, marker, ccr_hash = self._replace_content(tool_content, classification)
